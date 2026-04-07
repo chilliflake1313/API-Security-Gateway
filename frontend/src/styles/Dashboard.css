@@ -1,135 +1,160 @@
 .dashboard {
-  background: white;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
 }
 
 .dashboard h2 {
-  margin-top: 0;
-  color: #2c3e50;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 12px;
+  margin-bottom: 1.5rem;
+  color: var(--primary);
+  font-size: 1.5rem;
 }
 
 .dashboard.loading,
 .dashboard.error,
 .dashboard.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  color: #7f8c8d;
-  font-size: 18px;
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+  font-size: 1.1rem;
 }
 
 .dashboard.error {
-  background: #fadbd8;
-  color: #c0392b;
+  background: rgba(231, 76, 60, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin: 20px 0;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .info-card {
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  padding: 16px;
-  text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(52, 152, 219, 0.2);
 }
 
 .info-card label {
   display: block;
-  font-size: 12px;
-  color: #7f8c8d;
+  font-size: 0.85rem;
   text-transform: uppercase;
-  margin-bottom: 8px;
-  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--gray);
+  margin-bottom: 0.5rem;
 }
 
 .info-card .value {
-  display: block;
-  font-size: 24px;
-  font-weight: bold;
-  color: #2c3e50;
-  word-break: break-all;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--light);
 }
 
-.status-allowed {
-  color: #27ae60;
+.info-card .status-blocked {
+  color: var(--danger);
 }
 
-.status-blocked {
-  color: #e74c3c;
+.info-card .status-allowed {
+  color: var(--success);
 }
 
 .progress-section {
-  margin-top: 24px;
+  margin-top: 2rem;
 }
 
 .progress-section label {
   display: block;
-  font-size: 12px;
-  color: #7f8c8d;
+  font-size: 0.85rem;
   text-transform: uppercase;
-  margin-bottom: 8px;
-  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--gray);
+  margin-bottom: 0.5rem;
 }
 
 .progress-bar {
-  width: 100%;
-  height: 24px;
-  background: #ecf0f1;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  height: 30px;
+  border-radius: 15px;
   overflow: hidden;
+  border: 1px solid var(--border);
+  position: relative;
 }
 
 .progress-fill {
   height: 100%;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .usage-percent {
   display: block;
   text-align: right;
-  font-size: 14px;
-  margin-top: 8px;
-  color: #7f8c8d;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  color: var(--gray);
   font-weight: 600;
 }
 
 .warning-box,
 .info-box {
-  margin-top: 16px;
-  padding: 12px 16px;
-  border-radius: 6px;
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--primary);
 }
 
 .warning-box {
-  background: #fef5e7;
-  border: 1px solid #f9e79f;
-  color: #d68910;
+  background: rgba(243, 156, 18, 0.1);
+  border-left-color: var(--warning);
+  color: var(--warning);
 }
 
 .info-box {
-  background: #d6eaf8;
-  border: 1px solid #a9ccee;
-  color: #1a5276;
+  background: rgba(52, 152, 219, 0.1);
+  border-left-color: var(--primary);
+  color: var(--primary);
 }
 
 .warning-box strong,
 .info-box strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 .warning-box p,
 .info-box p {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard {
+    padding: 1.5rem;
+  }
+
+  .dashboard h2 {
+    font-size: 1.25rem;
+  }
 }
