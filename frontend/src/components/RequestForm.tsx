@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { RateLimitStatus } from '../types';
 import { apiService } from '../services/api.service';
+import { RateLimitStatus } from '../types';
 import '../styles/RequestForm.css';
 
 interface RequestFormProps {
@@ -8,72 +8,152 @@ interface RequestFormProps {
   onRequestSent: () => void;
 }
 
+interface RequestResult {
+  success: boolean;
+  message: string;
+  status: number;
+  timestamp: string;
+}
+
 function RequestForm({ status, onRequestSent }: RequestFormProps) {
   const [loading, setLoading] = useState(false);
-  const [responseMessage, setResponseMessage] = useState<string | null>(null);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [results, setResults] = useState<RequestResult[]>([]);
+  const [burstCount, setBurstCount] = useState(10);
 
-  const handleSendRequest = async () => {
+  const sendSingleRequest = async () => {
     setLoading(true);
-    setResponseMessage(null);
-
     try {
       const response = await apiService.test();
-
-      if (response.success) {
-        setIsSuccess(true);
-        setResponseMessage(`✅ Success! Your IP: ${response.data?.ip}`);
-      } else {
-        setIsSuccess(false);
-        setResponseMessage(`❌ Error: ${response.error}`);
-      }
-
-      // Refresh status after request
+      const result: RequestResult = {
+        success: response.success,
+        message: response.data?.message || 'Success',
+        status: 200,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setResults((prev) => [result, ...prev].slice(0, 50));
       onRequestSent();
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Request failed';
-      setIsSuccess(false);
-      setResponseMessage(`❌ ${errorMsg}`);
+      const result: RequestResult = {
+        success: false,
+        message: error instanceof Error ? error.message : 'Request failed',
+        status: 429,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setResults((prev) => [result, ...prev].slice(0, 50));
     } finally {
       setLoading(false);
     }
   };
 
+  const sendBurstRequests = async () => {
+    setLoading(true);
+    const promises: Promise<void>[] = [];
+
+    for (let i = 0; i < burstCount; i++) {
+      const promise = apiService
+        .test()
+        .then((response) => {
+          const result: RequestResult = {
+            success: true,
+            message: `Request ${i + 1}: ${response.data?.message}`,
+            status: 200,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+          setResults((prev) => [result, ...prev].slice(0, 50));
+        })
+        .catch((error) => {
+          const result: RequestResult = {
+            success: false,
+            message: `Request ${i + 1}: ${error.message}`,
+            status: 429,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+          setResults((prev) => [result, ...prev].slice(0, 50));
+        });
+      promises.push(promise);
+    }
+
+    await Promise.all(promises);
+    setLoading(false);
+    onRequestSent();
+  };
+
+  const clearResults = () => {
+    setResults([]);
+  };
+
   const isBlocked = status?.isBlocked ?? false;
-  const canMakeRequest = !isBlocked && (status?.remaining ?? 0) > 0;
+  const canSendBurst = status && status.remaining >= burstCount;
 
   return (
     <div className="request-form">
-      <h2>Test API Rate Limiter</h2>
+      <h2>Test Rate Limiting</h2>
 
-      <p className="description">
-        Send requests to test the rate limiting system. You have{' '}
-        <strong>{status?.remaining ?? '?'}</strong> requests remaining.
-      </p>
+      <div className="form-controls">
+        <button
+          onClick={sendSingleRequest}
+          disabled={loading || isBlocked}
+          className="btn btn-primary"
+        >
+          {loading ? 'Sending...' : 'Send Single Request'}
+        </button>
 
-      <button
-        onClick={handleSendRequest}
-        disabled={loading || !canMakeRequest}
-        className={`send-button ${loading ? 'loading' : ''}`}
-      >
-        {loading ? '⏳ Sending...' : '📤 Send Request'}
-      </button>
+        <div className="burst-control">
+          <label>Burst Count:</label>
+          <input
+            type="number"
+            min="1"
+            max="200"
+            value={burstCount}
+            onChange={(e) => setBurstCount(parseInt(e.target.value) || 10)}
+            disabled={loading}
+          />
+          <button
+            onClick={sendBurstRequests}
+            disabled={loading || isBlocked || !canSendBurst}
+            className="btn btn-warning"
+          >
+            {loading ? 'Sending...' : `Send ${burstCount} Requests`}
+          </button>
+        </div>
 
-      {!canMakeRequest && (
-        <div className="limitation-notice">
-          <p>
-            {isBlocked
-              ? '🚫 Your IP is blocked. Wait before making more requests.'
-              : '⚠️ Rate limit reached. Wait for the window to reset.'}
-          </p>
+        {results.length > 0 && (
+          <button onClick={clearResults} className="btn btn-secondary">
+            Clear Results
+          </button>
+        )}
+      </div>
+
+      {isBlocked && (
+        <div className="alert alert-danger">
+          You are currently rate limited. Reset at:{' '}
+          {new Date(status.resetAt * 1000).toLocaleTimeString()}
         </div>
       )}
 
-      {responseMessage && (
-        <div className={`response-message ${isSuccess ? 'success' : 'error'}`}>
-          {responseMessage}
+      {!canSendBurst && !isBlocked && burstCount > (status?.remaining ?? 0) && (
+        <div className="alert alert-warning">
+          Not enough remaining requests for burst. Only {status?.remaining} left.
         </div>
       )}
+
+      <div className="results-section">
+        <h3>Request Results ({results.length})</h3>
+        <div className="results-list">
+          {results.map((result, index) => (
+            <div
+              key={`${result.timestamp}-${index}`}
+              className={`result-item ${result.success ? 'success' : 'error'}`}
+            >
+              <span className="result-timestamp">{result.timestamp}</span>
+              <span className="result-status">
+                {result.success ? 'OK' : 'ERR'} [{result.status}]
+              </span>
+              <span className="result-message">{result.message}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
