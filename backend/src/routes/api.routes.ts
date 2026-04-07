@@ -59,4 +59,34 @@ router.get('/status', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/monitor - health and status
+router.get('/monitor', async (req: Request, res: Response) => {
+  try {
+    const redisHealth = await redisService.isHealthy();
+
+    const response: ApiResponse<{
+      redis: boolean;
+      uptime: number;
+      timestamp: string;
+    }> = {
+      success: redisHealth,
+      data: {
+        redis: redisHealth,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(response);
+  } catch (error) {
+    const response: ApiResponse<null> = {
+      success: false,
+      error: 'Monitor check failed',
+      timestamp: new Date().toISOString(),
+    };
+    res.status(500).json(response);
+  }
+});
+
 export default router;
