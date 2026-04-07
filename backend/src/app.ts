@@ -1,67 +1,76 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { config } from './config/env';
-import { rateLimiterMiddleware } from './middleware/rateLimiter';
+import { rateLimiter } from './middleware/rateLimiter';
 import apiRoutes from './routes/api.routes';
-import logger from './utils/logger';
-import { ApiResponse } from './types';
+import { logRequest } from './utils/logger';
+import { config } from './config/env';
 
-const app = express();
+const app: Express = express();
 
-// Middleware - order matters!
-// 1. Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// 2. CORS
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true,
-  })
-);
+// CORS
+app.use(cors({
+  origin: config.nodeEnv === 'production'
+    ? ['http://localhost', 'http://localhost:80']
+    : '*',
+  credentials: true,
+}));
 
-// 3. Request logging middleware
+// Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
-  logger.info(`${req.method} ${req.path}`);
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logRequest({
+      timestamp: new Date().toISOString(),
+      ip: req.ip || req.socket.remoteAddress || 'unknown',
+      method: req.method,
+      endpoint: req.path,
+      status: res.statusCode,
+      action: res.statusCode === 429 ? 'blocked' : 'allowed',
+      reason: `${duration}ms`,
+    });
+  });
+
   next();
 });
 
-// 4. Rate limiter (before routes!)
-app.use(rateLimiterMiddleware);
+// Apply rate limiter to all /api routes
+app.use('/api', rateLimiter);
 
-// 5. Routes
+// Routes
 app.use('/api', apiRoutes);
 
-// Health check endpoint (no rate limit)
-app.get('/health', (req: Request, res: Response) => {
-  const response: ApiResponse<{ status: string }> = {
-    success: true,
-    data: { status: 'healthy' },
-    timestamp: new Date().toISOString(),
-  };
-  res.json(response);
+// Root endpoint
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    name: 'API Security Gateway',
+    version: '1.0.0',
+    status: 'running',
+  });
 });
 
 // 404 handler
 app.use((req: Request, res: Response) => {
-  const response: ApiResponse<null> = {
+  res.status(404).json({
     success: false,
     error: 'Endpoint not found',
     timestamp: new Date().toISOString(),
-  };
-  res.status(404).json(response);
+  });
 });
 
-// Global error handler
+// Error handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error(`Unhandled error: ${err.message}`);
-  const response: ApiResponse<null> = {
+  console.error(err.stack);
+  res.status(500).json({
     success: false,
     error: 'Internal server error',
     timestamp: new Date().toISOString(),
-  };
-  res.status(500).json(response);
+  });
 });
 
 export default app;

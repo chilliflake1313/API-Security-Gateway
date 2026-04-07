@@ -24,6 +24,17 @@ export interface ApiResponse<T> {
   timestamp: string;
 }
 
+export interface TestResponse {
+  message: string;
+  ip: string;
+}
+
+export interface MonitorResponse {
+  redis: boolean;
+  uptime: number;
+  timestamp: string;
+}
+
 export interface BlockedIp {
   ip: string;
   reason: string;

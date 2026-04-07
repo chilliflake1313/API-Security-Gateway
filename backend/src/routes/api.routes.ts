@@ -1,92 +1,84 @@
 import { Router, Request, Response } from 'express';
-import { redisService } from '../services/redis.service';
-import { ApiResponse, RateLimitStatus } from '../types';
-import { REDIS_KEYS } from '../utils/constants';
+import redisService from '../services/redis.service';
+import { config } from '../config/env';
 
 const router = Router();
 
-// GET /api/test - simple test endpoint
+// GET /api/test - Test endpoint
 router.get('/test', (req: Request, res: Response) => {
-  const response: ApiResponse<{ message: string; ip: string }> = {
+  res.json({
     success: true,
     data: {
-      message: 'API is working',
+      message: 'Request successful',
       ip: req.ip || 'unknown',
+      timestamp: new Date().toISOString(),
     },
-    timestamp: new Date().toISOString(),
-  };
-  res.json(response);
+  });
 });
 
-// GET /api/status - get rate limit status
-router.get('/status', async (req: Request, res: Response) => {
+// GET /api/ratelimit/status - Get current rate limit status
+router.get('/ratelimit/status', async (req: Request, res: Response) => {
   try {
     const ip = req.ip || 'unknown';
-    const rateLimitKey = `${REDIS_KEYS.rateLimitPrefix}${ip}`;
-    const blockedKey = `${REDIS_KEYS.blockedIpPrefix}${ip}`;
+    const key = `ratelimit:${ip}`;
 
-    const current = await redisService.get(rateLimitKey);
-    const blocked = await redisService.get(blockedKey);
-    const ttl = await redisService.ttl(rateLimitKey);
+    const current = parseInt(await redisService.get(key) || '0', 10);
+    const ttl = await redisService.ttl(key);
+    const limit = config.rateLimit.max;
+    const remaining = Math.max(0, limit - current);
+    const resetAt = Date.now() / 1000 + ttl;
 
-    const currentCount = current ? parseInt(current) : 0;
-    const limit = 100;
-    const remaining = Math.max(0, limit - currentCount);
-
-    const status: RateLimitStatus = {
-      ip,
-      current: currentCount,
-      limit,
-      remaining,
-      resetAt: ttl > 0 ? Date.now() + ttl * 1000 : 0,
-      isBlocked: !!blocked,
-    };
-
-    const response: ApiResponse<RateLimitStatus> = {
+    res.json({
       success: true,
-      data: status,
-      timestamp: new Date().toISOString(),
-    };
-
-    res.json(response);
+      data: {
+        ip,
+        current,
+        limit,
+        remaining,
+        resetAt,
+        isBlocked: current >= limit,
+      },
+    });
   } catch (error) {
-    const response: ApiResponse<null> = {
+    res.status(500).json({
       success: false,
       error: 'Failed to get status',
-      timestamp: new Date().toISOString(),
-    };
-    res.status(500).json(response);
+    });
   }
 });
 
-// GET /api/monitor - health and status
-router.get('/monitor', async (req: Request, res: Response) => {
+// POST /api/ratelimit/reset - Reset rate limit for current IP
+router.post('/ratelimit/reset', async (req: Request, res: Response) => {
   try {
-    const redisHealth = await redisService.isHealthy();
+    const ip = req.ip || 'unknown';
+    const key = `ratelimit:${ip}`;
 
-    const response: ApiResponse<{
-      redis: boolean;
-      uptime: number;
-      timestamp: string;
-    }> = {
-      success: redisHealth,
-      data: {
-        redis: redisHealth,
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-      },
-      timestamp: new Date().toISOString(),
-    };
+    await redisService.delete(key);
 
-    res.json(response);
+    res.json({
+      success: true,
+      message: 'Rate limit reset successfully',
+    });
   } catch (error) {
-    const response: ApiResponse<null> = {
+    res.status(500).json({
       success: false,
-      error: 'Monitor check failed',
-      timestamp: new Date().toISOString(),
-    };
-    res.status(500).json(response);
+      error: 'Failed to reset rate limit',
+    });
   }
+});
+
+// GET /api/monitor - Health check
+router.get('/monitor', async (req: Request, res: Response) => {
+  const redisHealthy = await redisService.isHealthy();
+
+  res.json({
+    success: true,
+    data: {
+      redis: redisHealthy,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    },
+  });
 });
 
 export default router;

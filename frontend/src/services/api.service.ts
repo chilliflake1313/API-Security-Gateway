@@ -6,7 +6,8 @@ import {
   MonitorResponse,
 } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_BASE_URL =
+  (typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:3001').replace(/\/$/, '');
 
 class ApiService {
   private client: AxiosInstance;

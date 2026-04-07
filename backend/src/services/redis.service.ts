@@ -15,6 +15,14 @@ class RedisService {
         database: config.redis.db,
       }) as RedisClientType;
 
+      this.client.on('error', (err) => {
+        logger.error('Redis Client Error', err);
+      });
+
+      this.client.on('connect', () => {
+        logger.info('Redis client connected');
+      });
+
       await this.client.connect();
       logger.info('Redis connected successfully');
     } catch (error) {
@@ -76,4 +84,5 @@ class RedisService {
   }
 }
 
-export const redisService = new RedisService();
+const redisService = new RedisService();
+export default redisService;

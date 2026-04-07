@@ -1,83 +1,198 @@
 import { useState, useEffect } from 'react';
-import { RateLimitStatus, MonitorResponse } from './types';
-import { apiService } from './services/api.service';
-import { useApi } from './hooks/useApi';
-import Dashboard from './components/Dashboard';
-import RequestForm from './components/RequestForm';
-import StatusIndicator from './components/StatusIndicator';
-import './styles/App.css';
+import {
+  fetchRateLimitStatus,
+  sendTestRequest,
+  resetRateLimit,
+  RateLimitStatus,
+} from './api';
+import './styles.css';
 
-function App() {
-  const [refreshInterval, setRefreshInterval] = useState(5000);
+interface LogEntry {
+  id: number;
+  timestamp: string;
+  message: string;
+  type: 'success' | 'error';
+}
 
-  const statusApi = useApi(
-    () => apiService.getStatus(),
-    { autoFetch: true, retryCount: 2 }
-  );
+export default function App() {
+  // State - Pure Data (No UI coupling)
+  const [status, setStatus] = useState<RateLimitStatus | null>(null);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const monitorApi = useApi(
-    () => apiService.getMonitor(),
-    { autoFetch: true, retryCount: 2 }
-  );
+  // Business Logic - Fetch Status
+  const loadStatus = async () => {
+    try {
+      const data = await fetchRateLimitStatus();
+      setStatus(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load status');
+    }
+  };
 
-  // Refresh status periodically
+  // Business Logic - Send Test Request
+  const handleTestRequest = async () => {
+    setLoading(true);
+    try {
+      const result = await sendTestRequest();
+      addLog(`Request successful: ${result.message}`, 'success');
+      await loadStatus();
+    } catch (err) {
+      addLog(`${err instanceof Error ? err.message : 'Request failed'}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Business Logic - Reset Rate Limit
+  const handleReset = async () => {
+    try {
+      await resetRateLimit();
+      addLog('Rate limit reset successfully', 'success');
+      await loadStatus();
+    } catch (err) {
+      addLog(`Reset failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    }
+  };
+
+  // Utility - Add Log Entry
+  const addLog = (message: string, type: 'success' | 'error') => {
+    const newLog: LogEntry = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString(),
+      message,
+      type,
+    };
+    setLogs((prev) => [newLog, ...prev].slice(0, 50));
+  };
+
+  // Auto-refresh status every 3 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      statusApi.refetch();
-    }, refreshInterval);
-
+    loadStatus();
+    const interval = setInterval(loadStatus, 3000);
     return () => clearInterval(interval);
-  }, [refreshInterval, statusApi]);
+  }, []);
 
-  // Refresh monitor every 10 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      monitorApi.refetch();
-    }, 10000);
+  // Computed Values (UI-Ready Data)
+  const usagePercent = status ? (status.current / status.limit) * 100 : 0;
+  const progressColor =
+    usagePercent >= 90 ? 'danger' : usagePercent >= 70 ? 'warning' : 'success';
+  const statusColor = status?.isBlocked
+    ? 'danger'
+    : status && status.remaining < 20
+    ? 'warning'
+    : 'success';
 
-    return () => clearInterval(interval);
-  }, [monitorApi]);
-
-  const status = statusApi.data as RateLimitStatus | null;
-  const monitor = monitorApi.data as MonitorResponse | null;
-
+  // Render (Pure Presentation - Easy to Replace with Aceternity UI)
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>🛡️ API Security Gateway</h1>
+    <div className="container">
+      <header className="header">
+        <h1>API Security Gateway</h1>
         <p>Rate Limiting & Abuse Detection System</p>
       </header>
 
-      <main className="app-main">
-        <section className="status-section">
-          <StatusIndicator
-            label="System Status"
-            isHealthy={monitor?.redis ?? false}
-            details={monitor?.uptime ? `Uptime: ${Math.floor(monitor.uptime)}s` : 'Loading...'}
-          />
-        </section>
+      {error && (
+        <div className="alert alert-danger">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
 
-        <section className="dashboard-section">
-          <Dashboard
-            status={status}
-            loading={statusApi.loading}
-            error={statusApi.error}
-          />
-        </section>
+      {status?.isBlocked && (
+        <div className="alert alert-danger">
+          <strong>Rate Limit Exceeded</strong>
+          <br />
+          Reset at: {new Date(status.resetAt * 1000).toLocaleTimeString()}
+        </div>
+      )}
 
-        <section className="form-section">
-          <RequestForm
-            status={status}
-            onRequestSent={() => statusApi.refetch()}
-          />
-        </section>
+      <div className="grid grid-2">
+        <div className="card">
+          <h2 className="card-title">Rate Limit Status</h2>
 
-        <footer className="app-footer">
-          <p>Built with React + TypeScript | Backend: Node.js + Express</p>
-        </footer>
-      </main>
+          {status ? (
+            <>
+              <div className="stats">
+                <div className="stat-row">
+                  <span className="stat-label">Your IP</span>
+                  <span className="stat-value">{status.ip}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Current Requests</span>
+                  <span className="stat-value">{status.current}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Limit</span>
+                  <span className="stat-value">{status.limit}</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Remaining</span>
+                  <span className={`stat-value ${statusColor}`}>
+                    {status.remaining}
+                  </span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Status</span>
+                  <span className={`stat-value ${statusColor}`}>
+                    {status.isBlocked ? 'Blocked' : 'Active'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="progress-bar">
+                <div
+                  className={`progress-fill ${progressColor}`}
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <p>Loading...</p>
+          )}
+        </div>
+
+        <div className="card">
+          <h2 className="card-title">Actions</h2>
+
+          <div className="button-group">
+            <button
+              className="btn-primary"
+              onClick={handleTestRequest}
+              disabled={loading || status?.isBlocked}
+            >
+              {loading ? 'Sending...' : 'Send Test Request'}
+            </button>
+
+            <button className="btn-danger" onClick={handleReset}>
+              Reset Rate Limit
+            </button>
+          </div>
+
+          {status?.isBlocked && (
+            <div className="alert alert-info" style={{ marginTop: '16px' }}>
+              Rate limit exceeded. Use reset button or wait for auto-reset.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '20px' }}>
+        <h2 className="card-title">Request Logs ({logs.length})</h2>
+
+        <div className="logs">
+          {logs.length === 0 ? (
+            <p style={{ color: '#888' }}>No logs yet. Send a test request to start.</p>
+          ) : (
+            logs.map((log) => (
+              <div key={log.id} className={`log-entry ${log.type}`}>
+                <div className="log-time">{log.timestamp}</div>
+                <div>{log.message}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
-
-export default App;

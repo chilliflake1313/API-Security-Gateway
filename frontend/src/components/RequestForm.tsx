@@ -127,7 +127,7 @@ function RequestForm({ status, onRequestSent }: RequestFormProps) {
       {isBlocked && (
         <div className="alert alert-danger">
           You are currently rate limited. Reset at:{' '}
-          {new Date(status.resetAt * 1000).toLocaleTimeString()}
+          {status ? new Date(status.resetAt * 1000).toLocaleTimeString() : 'Unknown'}
         </div>
       )}
 

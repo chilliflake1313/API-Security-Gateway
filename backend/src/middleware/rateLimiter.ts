@@ -1,99 +1,59 @@
 import { Request, Response, NextFunction } from 'express';
-import { redisService } from '../services/redis.service';
+import redisService from '../services/redis.service';
 import { config } from '../config/env';
-import { HTTP_STATUS, REDIS_KEYS, RATE_LIMIT_MESSAGES, LOG_ACTIONS } from '../utils/constants';
-import { logRequest, logError } from '../utils/logger';
 
-export async function rateLimiterMiddleware(
+// Exempt these endpoints from rate limiting
+const EXEMPT_PATHS = ['/monitor', '/ratelimit/status', '/ratelimit/reset'];
+
+export const rateLimiter = async (
   req: Request,
   res: Response,
   next: NextFunction
-) {
-  const ip = req.ip || 'unknown';
-  const method = req.method;
-  const endpoint = req.path;
-  const timestamp = Date.now();
-
+): Promise<void> => {
   try {
-    // Check if IP is blocked
-    const blockedKey = `${REDIS_KEYS.blockedIpPrefix}${ip}`;
-    const isBlocked = await redisService.get(blockedKey);
-
-    if (isBlocked) {
-      logRequest({
-        timestamp: new Date().toISOString(),
-        ip,
-        method,
-        endpoint,
-        status: HTTP_STATUS.TOO_MANY_REQUESTS,
-        action: LOG_ACTIONS.BLOCKED,
-        reason: RATE_LIMIT_MESSAGES.BLOCKED_IP,
-      });
-
-      return res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
-        success: false,
-        error: RATE_LIMIT_MESSAGES.BLOCKED_IP,
-        timestamp: new Date().toISOString(),
-      });
+    // Skip rate limiting for exempt paths
+    if (EXEMPT_PATHS.includes(req.path)) {
+      return next();
     }
 
-    // Get rate limit key
-    const rateLimitKey = `${REDIS_KEYS.rateLimitPrefix}${ip}`;
-    
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = `ratelimit:${ip}`;
+
+    const limit = config.rateLimit.max;
+    const window = config.rateLimit.window;
+
     // Increment counter
-    const count = await redisService.increment(rateLimitKey);
+    const current = await redisService.increment(key);
 
     // Set expiry on first request
-    if (count === 1) {
-      await redisService.setExpiry(rateLimitKey, config.rateLimit.window);
+    if (current === 1) {
+      await redisService.setExpiry(key, window);
     }
 
-    // Check if limit exceeded
-    if (count > config.rateLimit.max) {
-      // Block this IP
-      const violations = Math.floor((count - config.rateLimit.max) / 10) + 1;
-      const banDuration = Math.min(violations * 60, 3600); // Max 1 hour
+    // Get TTL
+    const ttl = await redisService.ttl(key);
+    const resetAt = Math.floor(Date.now() / 1000) + ttl;
 
-      await redisService.set(blockedKey, 'blocked', banDuration);
+    // Always set headers
+    res.setHeader('X-RateLimit-Limit', limit.toString());
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - current).toString());
+    res.setHeader('X-RateLimit-Reset', resetAt);
 
-      logRequest({
-        timestamp: new Date().toISOString(),
-        ip,
-        method,
-        endpoint,
-        status: HTTP_STATUS.TOO_MANY_REQUESTS,
-        action: LOG_ACTIONS.BLOCKED,
-        reason: RATE_LIMIT_MESSAGES.BLOCKED_LIMIT,
-      });
-
-      return res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
+    // Check if exceeded
+    if (current > limit) {
+      res.status(429).json({
         success: false,
-        error: RATE_LIMIT_MESSAGES.BLOCKED_LIMIT,
-        timestamp: new Date().toISOString(),
+        error: 'Rate limit exceeded',
+        current,
+        limit,
+        resetAt,
       });
+      return;
     }
-
-    // Request allowed - add rate limit info to response header
-    const remaining = config.rateLimit.max - count;
-    res.setHeader('X-RateLimit-Limit', config.rateLimit.max);
-    res.setHeader('X-RateLimit-Remaining', remaining);
-    res.setHeader('X-RateLimit-Reset', Math.ceil(timestamp / 1000) + config.rateLimit.window);
-
-    logRequest({
-      timestamp: new Date().toISOString(),
-      ip,
-      method,
-      endpoint,
-      status: HTTP_STATUS.OK,
-      action: LOG_ACTIONS.ALLOWED,
-    });
 
     next();
   } catch (error) {
-    logError(error as Error, 'rateLimiterMiddleware');
-
-    // Fail open: allow request if Redis is down
-    res.setHeader('X-RateLimit-Error', 'Service degraded');
-    next();
+    console.error('Rate limiter error:', error);
+    next(); // Allow through on error
   }
-}
+};
