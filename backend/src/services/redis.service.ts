@@ -8,9 +8,11 @@ class RedisService {
   async connect(): Promise<void> {
     try {
       this.client = createClient({
-        host: config.redis.host,
-        port: config.redis.port,
-        db: config.redis.db,
+        socket: {
+          host: config.redis.host,
+          port: config.redis.port,
+        },
+        database: config.redis.db,
       }) as RedisClientType;
 
       await this.client.connect();
