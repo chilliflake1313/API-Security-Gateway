@@ -54,41 +54,28 @@ function Dashboard({ status, loading, error }: DashboardProps) {
 
         <div className="info-card">
           <label>Remaining</label>
-          <span className={`value ${status.remaining < 10 ? 'warning' : ''}`}>
-            {status.remaining}
-          </span>
+          <span className="value">{status.remaining}</span>
         </div>
       </div>
 
       <div className="progress-section">
-        <label>Usage</label>
-        <div className="progress-bar">
+        <h3>Usage Progress</h3>
+        <div className="progress-bar-container">
           <div
-            className="progress-fill"
+            className="progress-bar"
             style={{
               width: `${Math.min(usage, 100)}%`,
               backgroundColor: barColor,
             }}
-          />
+          >
+            {Math.round(usage)}%
+          </div>
         </div>
-        <span className="usage-percent">{Math.round(usage)}%</span>
       </div>
 
-      {status.isBlocked && (
-        <div className="warning-box">
-          <strong>Your IP is temporarily blocked</strong>
-          <p>
-            Resets at: {new Date(status.resetAt).toLocaleTimeString()}
-          </p>
-        </div>
-      )}
-
-      {status.remaining < 20 && !status.isBlocked && (
-        <div className="info-box">
-          <strong>Approaching rate limit</strong>
-          <p>Only {status.remaining} requests remaining in this window</p>
-        </div>
-      )}
+      <div className="reset-info">
+        <strong>Reset Time:</strong> {new Date(status.resetAt * 1000).toLocaleTimeString()}
+      </div>
     </div>
   );
 }
