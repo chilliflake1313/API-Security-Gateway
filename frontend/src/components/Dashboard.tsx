@@ -9,7 +9,7 @@ interface DashboardProps {
 
 function Dashboard({ status, loading, error }: DashboardProps) {
   if (loading) {
-    return <div className="dashboard loading">⏳ Loading status...</div>;
+    return <div className="dashboard loading">Loading status...</div>;
   }
 
   if (error) {
@@ -41,7 +41,7 @@ function Dashboard({ status, loading, error }: DashboardProps) {
         <div className="info-card">
           <label>Status</label>
           <span className={`value status-${status.isBlocked ? 'blocked' : 'allowed'}`}>
-            {status.isBlocked ? '🚫 Blocked' : '✅ Allowed'}
+            {status.isBlocked ? 'Blocked' : 'Allowed'}
           </span>
         </div>
 
@@ -76,7 +76,7 @@ function Dashboard({ status, loading, error }: DashboardProps) {
 
       {status.isBlocked && (
         <div className="warning-box">
-          <strong>⚠️ Your IP is temporarily blocked</strong>
+          <strong>Your IP is temporarily blocked</strong>
           <p>
             Resets at: {new Date(status.resetAt).toLocaleTimeString()}
           </p>
@@ -85,7 +85,7 @@ function Dashboard({ status, loading, error }: DashboardProps) {
 
       {status.remaining < 20 && !status.isBlocked && (
         <div className="info-box">
-          <strong>ℹ️ Approaching rate limit</strong>
+          <strong>Approaching rate limit</strong>
           <p>Only {status.remaining} requests remaining in this window</p>
         </div>
       )}

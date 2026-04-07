@@ -15,7 +15,7 @@ function StatusIndicator({ label, isHealthy, details }: StatusIndicatorProps) {
       <div className="status-content">
         <label>{label}</label>
         <span className="status-text">
-          {isHealthy ? '🟢 Healthy' : '🔴 Unhealthy'}
+          {isHealthy ? 'Healthy' : 'Unhealthy'}
         </span>
         {details && <p className="status-details">{details}</p>}
       </div>
